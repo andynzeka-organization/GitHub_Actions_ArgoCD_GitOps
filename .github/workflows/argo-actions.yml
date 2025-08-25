@@ -14,19 +14,20 @@ env:
   ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
   GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
   GIT_EMAIL: ${{ secrets.GIT_EMAIL }}
-    
+
 jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      commit_id: ${{ env.COMMIT_ID }}
+      commit_id: ${{ steps.short_commit_id.outputs.commit_id }}
+
     steps: 
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           fetch-depth: 0
-              
+
       - name: Set up NodeJS
         uses: actions/setup-node@v3
         with: 
@@ -35,22 +36,21 @@ jobs:
       - name: Install NodeJS dependencies
         run: npm install
 
-      - name: Shorten commit ID
-        shell: bash
-        run: |
-          echo "COMMIT_ID=${GITHUB_SHA::6}" >> "$GITHUB_ENV"
+      - name: Generate short commit ID
+        id: short_commit_id
+        run: echo "commit_id=${GITHUB_SHA::6}" >> $GITHUB_OUTPUT
 
       - name: Build Docker Image
-        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ env.COMMIT_ID }} .
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ steps.short_commit_id.outputs.commit_id }} .
 
       - name: Scan Docker Image with Trivy
-        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ env.COMMIT_ID }}
+        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ steps.short_commit_id.outputs.commit_id }}
 
       - name: Log in to DockerHub
         run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-      
+
       - name: Push Docker image to DockerHub
-        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ env.COMMIT_ID }} 
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ steps.short_commit_id.outputs.commit_id }}
 
   deploy:
     needs: build
@@ -74,32 +74,29 @@ jobs:
         shell: bash
         run: |
           argocd login argocd-server.argocd \
-          --username ${{ secrets.ARGOCD_USERNAME }} \
-          --password ${{ secrets.ARGOCD_PASSWORD }} \
-          --insecure \
-          --grpc-web
+            --username ${{ secrets.ARGOCD_USERNAME }} \
+            --password ${{ secrets.ARGOCD_PASSWORD }} \
+            --insecure \
+            --grpc-web
 
-      - name: Update deployment.yaml with newly built image tag
+      - name: Update deployment.yaml with new Docker tag
         run: |
           git config user.name "${{ secrets.GIT_USERNAME }}"
           git config user.email "${{ secrets.GIT_EMAIL }}"
           git fetch origin
           git checkout main
           git pull origin main
-          
-          echo "Updating manifest/deployment.yaml with image tag: ${{ needs.build.outputs.commit_id }}"
-          sed -i "s+${{ secrets.DOCKERHUB_USERNAME }}/my-app.*+${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ needs.build.outputs.commit_id }}+g" manifest/deployment.yaml
-          cat manifest/deployment.yaml
+
+          # Replace old tag with new one in deployment.yaml
+          sed -i "s|${{ secrets.DOCKERHUB_USERNAME }}/my-app:.*|${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ needs.build.outputs.commit_id }}|g" manifest/deployment.yaml
+
+          echo "✅ Updated deployment.yaml with image tag:"
+          grep "image:" manifest/deployment.yaml
 
       - name: Commit and Push Updated deployment.yaml
         run: |
-          git config user.name "${{ secrets.GIT_USERNAME }}"
-          git config user.email "${{ secrets.GIT_EMAIL }}"
           git remote set-url origin https://$GIT_USERNAME:$PERSONAL_ACCESS_TOKEN@github.com/${{ github.repository }}.git
-          git fetch origin
-          git checkout main
-          git pull origin main
-          git add .
+          git add manifest/deployment.yaml
 
           if git diff --cached --quiet; then
             echo "No changes to commit"
@@ -108,5 +105,5 @@ jobs:
             git push origin main
           fi
 
-      - name: Refresh ArgoCD App and Sync
+      - name: Sync ArgoCD App
         run: argocd app sync my-app
