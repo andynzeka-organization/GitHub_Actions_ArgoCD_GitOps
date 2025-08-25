@@ -1,113 +1,112 @@
 name: GitOps Pipeline with ArgoCD
 
 on: 
-    push:
-        branches: 
-            - main
-        # paths-ignore:
-        #     - 'manifest/**' # ignore changes to manifest files to prevent loop
+  push:
+    branches: 
+      - main
+
 env: 
-    PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-    DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-    DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-    ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-    ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
-    ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
-    GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
-    GIT_EMAIL: ${{ secrets.GIT_EMAIL }}
+  PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+  ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+  ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+  ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+  GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+  GIT_EMAIL: ${{ secrets.GIT_EMAIL }}
     
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        steps: 
-            - name: Checkout code
-              uses: actions/checkout@v3
-              with:
-                token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-                fetch-depth: 0
-                
-            - name: Set up NodeJS
-              uses: actions/setup-node@v3
-              with: 
-                node-version: '14'
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      commit_id: ${{ env.COMMIT_ID }}
+    steps: 
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          fetch-depth: 0
+              
+      - name: Set up NodeJS
+        uses: actions/setup-node@v3
+        with: 
+          node-version: '14'
 
-            - name: Install NodeJS dependencies
-              run: npm install
+      - name: Install NodeJS dependencies
+        run: npm install
 
-            - name: Build Docker Image
-              run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }} .
+      - name: Shorten commit ID
+        shell: bash
+        run: |
+          echo "COMMIT_ID=${GITHUB_SHA::6}" >> "$GITHUB_ENV"
 
-            - name: Scan Docker Image with Trivy
-              run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }}
+      - name: Build Docker Image
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ env.COMMIT_ID }} .
 
-            - name: Log in to DockerHub
-              run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-            
-            - name: Push Docker image to DockerHub
-              run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }} 
+      - name: Scan Docker Image with Trivy
+        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ env.COMMIT_ID }}
 
-    deploy:
-        needs: build
-        runs-on: self-hosted
-        steps: 
-            - name: Checkout code
-              uses: actions/checkout@v3
-              with:
-                token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-                fetch-depth: 0  # get all history of all branches and tags
+      - name: Log in to DockerHub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      
+      - name: Push Docker image to DockerHub
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ env.COMMIT_ID }} 
 
-            # - name: Install kubectl
-            #   run: |
-            #       curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.30.7/2024-12-12/bin/linux/amd64/kubectl
-            #       chmod +x ./kubectl
-            #       sudo mv ./kubectl /usr/local/bin/kubectl
+  deploy:
+    needs: build
+    runs-on: self-hosted
+    steps: 
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          fetch-depth: 0
 
-            - name: Install ArgoCD CLI
-              shell: bash
-              run: |
-                curl -ksSL -o /tmp/argocd https://argocd-server.argocd/download/argocd-linux-arm64
-                chmod +x /tmp/argocd
-                sudo mv /tmp/argocd /usr/local/bin/argocd
-                echo "✅ ArgoCD CLI installed successfully."
+      - name: Install ArgoCD CLI
+        shell: bash
+        run: |
+          curl -ksSL -o /tmp/argocd https://argocd-server.argocd/download/argocd-linux-arm64
+          chmod +x /tmp/argocd
+          sudo mv /tmp/argocd /usr/local/bin/argocd
+          echo "✅ ArgoCD CLI installed successfully."
 
-            - name: Argocd app sync
-              shell: bash
-              run: |
-                argocd login argocd-server.argocd \
-                --username ${{ secrets.ARGOCD_USERNAME }} \
-                --password ${{ secrets.ARGOCD_PASSWORD }} \
-                --insecure \
-                --grpc-web
+      - name: Argocd login
+        shell: bash
+        run: |
+          argocd login argocd-server.argocd \
+          --username ${{ secrets.ARGOCD_USERNAME }} \
+          --password ${{ secrets.ARGOCD_PASSWORD }} \
+          --insecure \
+          --grpc-web
 
-            - name: Update deployment.yaml with newly built image
-              run: |
-                git config user.name "${{ secrets.GIT_USERNAME }}"
-                git config user.email "${{ secrets.GIT_EMAIL }}"
-                git fetch origin
-                git checkout main
-                git pull origin main
-                pwd
-                cat manifest/deployment.yaml
-                pwd
-                sed -i "s+${{ secrets.DOCKERHUB_USERNAME }}/my-app.*+${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ github.sha }}+g" manifest/deployment.yaml
-                cat manifest/deployment.yaml
+      - name: Update deployment.yaml with newly built image tag
+        run: |
+          git config user.name "${{ secrets.GIT_USERNAME }}"
+          git config user.email "${{ secrets.GIT_EMAIL }}"
+          git fetch origin
+          git checkout main
+          git pull origin main
+          
+          echo "Updating manifest/deployment.yaml with image tag: ${{ needs.build.outputs.commit_id }}"
+          sed -i "s+${{ secrets.DOCKERHUB_USERNAME }}/my-app.*+${{ secrets.DOCKERHUB_USERNAME }}/my-app:${{ needs.build.outputs.commit_id }}+g" manifest/deployment.yaml
+          cat manifest/deployment.yaml
 
-            - name: Commit and Push Updated deployment.yaml
-              run: |
-                git config user.name "${{ secrets.GIT_USERNAME }}"
-                git config user.email "${{ secrets.GIT_EMAIL }}"
-                git remote set-url origin https://$GIT_USERNAME:$PERSONAL_ACCESS_TOKEN@github.com/${{ github.repository }}.git
-                git fetch origin
-                git checkout main
-                git pull origin main
-                git add .
+      - name: Commit and Push Updated deployment.yaml
+        run: |
+          git config user.name "${{ secrets.GIT_USERNAME }}"
+          git config user.email "${{ secrets.GIT_EMAIL }}"
+          git remote set-url origin https://$GIT_USERNAME:$PERSONAL_ACCESS_TOKEN@github.com/${{ github.repository }}.git
+          git fetch origin
+          git checkout main
+          git pull origin main
+          git add .
 
-                # Check if there are any staged changes before committing
-                if git diff --cached --quiet; then
-                  echo "No changes to commit"
-                else
-                  git commit -m "Update image to my-app:${{ github.sha }}"
-                  git push origin main
-                fi
-            - name: Refresh ArgoCD App and Sync
-              run: argocd app sync my-app
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update image to my-app:${{ needs.build.outputs.commit_id }}"
+            git push origin main
+          fi
+
+      - name: Refresh ArgoCD App and Sync
+        run: argocd app sync my-app
