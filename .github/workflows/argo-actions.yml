@@ -101,8 +101,13 @@ jobs:
                 git checkout main
                 git pull origin main
                 git add .
-                git commit -m "Update image to my-app:${{ github.sha }}"
-                git push origin main
 
+                # Check if there are any staged changes before committing
+                if git diff --cached --quiet; then
+                  echo "No changes to commit"
+                else
+                  git commit -m "Update image to my-app:${{ github.sha }}"
+                  git push origin main
+                fi
             - name: Refresh ArgoCD App and Sync
               run: argocd app sync my-app
