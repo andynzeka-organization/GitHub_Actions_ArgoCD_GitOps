@@ -71,11 +71,17 @@ jobs:
           chmod +x /tmp/argocd
           sudo mv /tmp/argocd /usr/local/bin/argocd
           echo "✅ ArgoCD CLI installed successfully."
+      
+      - name: Get ArgoCD ALB hostname from Terraform output
+        id: terraform_output
+        run: |
+          hostname=$(terraform -chdir=path/to/terraform/dir output -raw argocd_ingress_hostname)
+          echo "alb_hostname=$hostname" >> $GITHUB_OUTPUT
 
       - name: Argocd login
         shell: bash
         run: |
-          argocd login k8s-argocd-fcd9021302-1542969392.us-east-1.elb.amazonaws.com \
+          argocd login ${{ steps.terraform_output.outputs.alb_hostname }} \
             --username ${{ secrets.ARGOCD_USERNAME }} \
             --password ${{ secrets.ARGOCD_PASSWORD }} \
             --insecure \
