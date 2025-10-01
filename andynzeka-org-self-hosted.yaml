@@ -1,0 +1,20 @@
+apiVersion: actions.summerwind.dev/v1alpha1
+kind: RunnerDeployment
+metadata:
+  name: andynze-org-runner
+  namespace: actions-runner-system
+spec:
+  replicas: 1
+  template:
+    spec:
+      repository: andynzeka-organization/GitHub_Actions_ArgoCD_GitOps
+      env:
+      - name: ACTIONS_RUNNER_DEBUG
+        value: "true"
+      resources:
+        requests:
+          cpu: "500m" # 0.5 CPU
+          memory: "1Gi" # 1 GB RAM
+        limits:
+          cpu: "1" # 1 CPU              
+          memory: "2Gi" # 2 GB RAM

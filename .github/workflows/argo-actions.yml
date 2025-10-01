@@ -109,5 +109,3 @@ jobs:
 
       - name: Sync ArgoCD App
         run: argocd app sync my-app
-
-        
