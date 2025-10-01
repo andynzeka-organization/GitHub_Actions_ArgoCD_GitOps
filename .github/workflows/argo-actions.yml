@@ -79,18 +79,18 @@ jobs:
           sudo mv terraform /usr/local/bin/
           terraform version
 
-      - name: Get ArgoCD ALB hostname from Terraform output
-        id: terraform_output
-        run: |
-          cd terraform/argocd
-          hostname=$(terraform output -raw argocd_ingress_hostname)
-          echo "alb_hostname=$hostname" >> $GITHUB_OUTPUT
-          cd -
+      # - name: Get ArgoCD ALB hostname from Terraform output
+      #   id: terraform_output
+      #   run: |
+      #     cd terraform/argocd
+      #     hostname=$(terraform output -raw argocd_ingress_hostname)
+      #     echo "alb_hostname=$hostname" >> $GITHUB_OUTPUT
+      #     cd -
 
       - name: Argocd login
         shell: bash
         run: |
-          argocd login ${{ steps.terraform_output.outputs.alb_hostname }} \
+          argocd login  k8s-argocd-fcd9021302-1542969392.us-east-1.elb.amazonaws.com \
             --username ${{ secrets.ARGOCD_USERNAME }} \
             --password ${{ secrets.ARGOCD_PASSWORD }} \
             --insecure \
