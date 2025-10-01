@@ -1,6 +1,7 @@
 name: GitOps Pipeline with ArgoCD
 
-on: 
+on:
+  workflow_dispatch:
   push:
     branches: 
       - main
