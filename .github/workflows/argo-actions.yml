@@ -71,13 +71,14 @@ jobs:
           chmod +x /tmp/argocd
           sudo mv /tmp/argocd /usr/local/bin/argocd
           echo "✅ ArgoCD CLI installed successfully."
-      - name: Install Terraform
-        run: |
-          sudo apt-get update && sudo apt-get install -y wget unzip
-          wget https://releases.hashicorp.com/terraform/1.5.6/terraform_1.5.6_linux_amd64.zip
-          unzip terraform_1.5.6_linux_amd64.zip
-          sudo mv terraform /usr/local/bin/
-          terraform version
+      
+      # - name: Install Terraform
+      #   run: |
+      #     sudo apt-get update && sudo apt-get install -y wget unzip
+      #     wget https://releases.hashicorp.com/terraform/1.5.6/terraform_1.5.6_linux_amd64.zip
+      #     unzip terraform_1.5.6_linux_amd64.zip
+      #     sudo mv terraform /usr/local/bin/
+      #     terraform version
 
       # - name: Get ArgoCD ALB hostname from Terraform output
       #   id: terraform_output
@@ -87,7 +88,7 @@ jobs:
       #     echo "alb_hostname=$hostname" >> $GITHUB_OUTPUT
       #     cd -
 
-      - name: Argocd login
+      - name: ArgoCD login
         shell: bash
         run: |
           argocd login  k8s-argocd-fcd9021302-1542969392.us-east-1.elb.amazonaws.com \
