@@ -91,7 +91,7 @@ jobs:
       - name: ArgoCD login
         shell: bash
         run: |
-          argocd login http://k8s-argocd-fcd9021302-1542969392.us-east-1.elb.amazonaws.com/argocd \
+          argocd login k8s-argocd-fcd9021302-1542969392.us-east-1.elb.amazonaws.com/argocd \
             --username ${{ secrets.ARGOCD_USERNAME }} \
             --password ${{ secrets.ARGOCD_PASSWORD }} \
             --insecure \
