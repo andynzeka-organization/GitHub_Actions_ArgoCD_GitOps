@@ -81,8 +81,9 @@ jobs:
 
       - name: Get ArgoCD ALB hostname from Terraform output
         id: terraform_output
+        working-directory: /Users/andynze/myapp2/eks-aws-terraform-platform/argocd
         run: |
-          hostname=$(terraform -chdir=path/to/terraform/dir output -raw argocd_ingress_hostname)
+          hostname=$(terraform output -raw argocd_ingress_hostname)
           echo "alb_hostname=$hostname" >> $GITHUB_OUTPUT
 
       - name: Argocd login
